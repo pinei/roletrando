@@ -10,7 +10,7 @@ $ prefect deploy /app/flows/github_stars.py:github_stars \
 from prefect import flow, task
 from typing import List
 import httpx
-
+import logging
 
 @task(log_prints=True)
 def get_stars(repo: str):
