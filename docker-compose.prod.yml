@@ -1,0 +1,29 @@
+services:
+  prefect-server:
+    image: prefecthq/prefect:3.6-python3.10
+    environment:
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+    entrypoint: [ "prefect", "server", "start" ]
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect-data:/root/.prefect
+    restart: unless-stopped
+
+  prefect-worker:
+    build:
+      dockerfile: Dockerfile.worker
+    command: prefect worker start -p my-pool -t process
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - GIZMOSQL_URL=${GIZMOSQL_URL}
+      - GIZMOSQL_USERNAME=${GIZMOSQL_USERNAME}
+      - GIZMOSQL_PASSWORD=${GIZMOSQL_PASSWORD}
+    volumes:
+      - ./flows:/app/flows  # acesso aos flows
+    depends_on:
+      - prefect-server
+    restart: unless-stopped
+
+volumes:
+  prefect-data:
