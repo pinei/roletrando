@@ -55,3 +55,18 @@ BCB series codes used in the pipeline:
 The production setup ([docker-compose.prod.yml](docker-compose.prod.yml)) runs two services:
 - `prefect-server` — Prefect API server on port 4200
 - `prefect-worker` — Executes flows, built from [Dockerfile.worker](Dockerfile.worker)
+
+Command to start production (run outside devcontaner)
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Command to start bash in `prefect-worker` (run outside devcontaner)
+```bash
+docker compose -f docker-compose.prod.yml exec prefect-worker bash
+```
+
+Command to deploy all pipelines using `prefect.yaml` (inside `prefect-worker`)
+```bash
+prefect deploy --all
+```
