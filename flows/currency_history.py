@@ -7,18 +7,14 @@ $ prefect deploy /app/flows/currency_history.py:currency_history_pipeline \
   --cron "0 9 * * 1-5"
 '''
 
-import os
 from datetime import date, datetime, timedelta
 
 import httpx
 import pyarrow as pa
 import logging
-from adbc_driver_flightsql import dbapi as gizmosql
 from prefect import flow, task, get_run_logger
 
-GIZMOSQL_URL = os.environ["GIZMOSQL_URL"]
-GIZMOSQL_USERNAME = os.environ["GIZMOSQL_USERNAME"]
-GIZMOSQL_PASSWORD = os.environ["GIZMOSQL_PASSWORD"]
+from flows.lib.db import DbManager, Connection
 
 CURRENCY_CODES = {
     "USD": "1",      # Dólar americano
@@ -80,7 +76,7 @@ def fetch_currency_data(
 
 
 @task(name="ingest-currency-history", persist_result=False)
-def ingest_currency_history(table: pa.Table, conn: gizmosql.Connection) -> None:
+def ingest_currency_history(table: pa.Table, conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
         rows_loaded = cur.adbc_ingest(
@@ -93,7 +89,7 @@ def ingest_currency_history(table: pa.Table, conn: gizmosql.Connection) -> None:
         logger.info(f"Loaded {rows_loaded} rows into `currency_history_landing` table")
 
 @task(name="upsert-currency-history", persist_result=False)
-def upsert_currency_history(conn: gizmosql.Connection) -> None:
+def upsert_currency_history(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
         cur.execute(
@@ -133,7 +129,7 @@ def fetch_currency_history(
     return pa.table(columns, names=columns_names)
 
 @task(name="clear_landing_table", persist_result=False)
-def clear_landing_table(conn: gizmosql.Connection) -> None:
+def clear_landing_table(conn: Connection) -> None:
     logger = get_flow_logger()
     logger.info("Cleared `currency_history_landing` table")
     with conn.cursor() as cur:
@@ -149,14 +145,7 @@ def currency_history_pipeline() -> None:
 
     logger.info(f"Fetching currency history from {start_date} to {end_date}")
 
-    with gizmosql.connect(
-        uri=GIZMOSQL_URL,
-        db_kwargs={
-            "username": GIZMOSQL_USERNAME,
-            "password": GIZMOSQL_PASSWORD,
-        },
-        autocommit=True,
-    ) as conn:
+    with DbManager.from_env() as conn:
         for currency_name, series_code in CURRENCY_CODES.items():
             table = fetch_currency_history(
                 currency_name=currency_name,

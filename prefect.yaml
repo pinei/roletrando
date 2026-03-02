@@ -1,0 +1,54 @@
+name: roletrando
+prefect-version: "3.6"
+
+deployments:
+  - name: binance-ohlc-5m-prod
+    entrypoint: flows/binance_ohlc.py:binance_ohlc_pipeline
+    parameters:
+      interval: "5m"
+    schedules:
+      - cron: "*/1 * * * *"
+    work_pool:
+      name: my-pool
+
+  - name: binance-ohlc-30m-prod
+    entrypoint: flows/binance_ohlc.py:binance_ohlc_pipeline
+    parameters:
+      interval: "30m"
+    schedules:
+      - cron: "*/10 * * * *"
+    work_pool:
+      name: my-pool
+
+  - name: binance-ohlc-4h-prod
+    entrypoint: flows/binance_ohlc.py:binance_ohlc_pipeline
+    parameters:
+      interval: "4h"
+    schedules:
+      - cron: "0 */1 * * *"
+    work_pool:
+      name: my-pool
+
+  - name: currency-history-prod
+    entrypoint: flows/currency_history.py:currency_history_pipeline
+    schedules:
+      - cron: "0 9 * * 1-5"
+    work_pool:
+      name: my-pool
+
+  - name: github-stars-prod
+    entrypoint: flows/github_stars.py:github_stars
+    parameters:
+      repos:
+        - prefecthq/prefect
+    schedules:
+      - cron: "*/10 * * * *"
+    work_pool:
+      name: my-pool
+
+  - name: tuya-weather-prod
+    entrypoint: flows/tuya_weather.py:tuya_weather_pipeline
+    schedules:
+      - cron: "*/5 * * * *"
+    work_pool:
+      name: my-pool

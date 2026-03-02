@@ -21,6 +21,7 @@ services:
       - GIZMOSQL_PASSWORD=${GIZMOSQL_PASSWORD}
     volumes:
       - ./flows:/app/flows  # acesso aos flows
+      - ./prefect.yaml:/app/prefect.yaml:rw  # config do worker
     depends_on:
       - prefect-server
     restart: unless-stopped

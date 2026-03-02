@@ -1,44 +1,46 @@
 '''
 How to deploy
 
-$ prefect deploy /app/flows/binance_ohlc_5m.py:binance_ohlc_5m_pipeline \
-  --name binance-ohlc-5m-prod \
-  --pool my-pool \
-  --cron "*/5 * * * *"
+$ prefect deploy /app/flows/binance_ohlc.py:binance_ohlc_pipeline \
+  --name binance-ohlc-5m-prod --pool my-pool \
+  --cron "*/5 * * * *" --param interval=5m
+
+$ prefect deploy /app/flows/binance_ohlc.py:binance_ohlc_pipeline \
+  --name binance-ohlc-30m-prod --pool my-pool \
+  --cron "*/30 * * * *" --param interval=30m
+
+$ prefect deploy /app/flows/binance_ohlc.py:binance_ohlc_pipeline \
+  --name binance-ohlc-4h-prod --pool my-pool \
+  --cron "0 */4 * * *" --param interval=4h
 '''
 
 import logging
-import os
 from datetime import datetime
 
 import httpx
 import pyarrow as pa
-from adbc_driver_flightsql import dbapi as gizmosql
 from prefect import flow, task, get_run_logger
 
-GIZMOSQL_URL = os.environ["GIZMOSQL_URL"]
-GIZMOSQL_USERNAME = os.environ["GIZMOSQL_USERNAME"]
-GIZMOSQL_PASSWORD = os.environ["GIZMOSQL_PASSWORD"]
+from flows.lib.db import DbManager, Connection
 
 BINANCE_BASE_URL = "https://api.binance.com/api/v3/klines"
-INTERVAL = "5m"
 SYMBOL = "BTCUSDT"
 
 
-def get_flow_logger():
+def get_flow_logger(interval: str):
     class PrefixLoggerAdapter(logging.LoggerAdapter):
         def process(self, msg, kwargs):
-            return f"[BINANCE OHLC 5M] {msg}", kwargs
+            return f"[BINANCE OHLC {interval.upper()}] {msg}", kwargs
 
-    return PrefixLoggerAdapter(get_run_logger(), {"flow_name": "BINANCE OHLC 5M"})
+    return PrefixLoggerAdapter(get_run_logger(), {"flow_name": f"BINANCE OHLC {interval.upper()}"})
 
 
 @task(name="create-binance-ohlc-table", persist_result=False)
-def create_table(conn: gizmosql.Connection) -> None:
-    logger = get_flow_logger()
+def create_table(conn: Connection, interval: str) -> None:
+    logger = get_flow_logger(interval)
     with conn.cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS series.binance_ohlc_5m (
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS series.binance_ohlc_{interval} (
               symbol VARCHAR,
               open_timestamp TIMESTAMP,
               open FLOAT,
@@ -51,12 +53,13 @@ def create_table(conn: gizmosql.Connection) -> None:
               PRIMARY KEY (symbol, open_timestamp)
             )
         """)
-    logger.info("Ensured `series.binance_ohlc_5m` table exists")
+        created = cur.fetchone()[0]
+        logger.info(f"Ensured `series.binance_ohlc_{interval}` table exists (created={created})")
 
 
 @task(name="fetch-binance-ohlc")
-def fetch_ohlc(symbol: str, interval: str = INTERVAL, limit: int = 100) -> list[tuple]:
-    logger = get_flow_logger()
+def fetch_ohlc(symbol: str, interval: str, limit: int = 100) -> list[tuple]:
+    logger = get_flow_logger(interval)
     logger.info(f'Fetching {symbol} using "{interval}" interval')
 
     params = {"symbol": symbol, "interval": interval, "limit": limit}
@@ -116,8 +119,8 @@ def convert_to_arrow(records: list[tuple]) -> pa.Table:
 
 
 @task(name="ingest-binance-ohlc", persist_result=False)
-def ingest_ohlc(table: pa.Table, conn: gizmosql.Connection, interval: str) -> None:
-    logger = get_flow_logger()
+def ingest_ohlc(table: pa.Table, conn: Connection, interval: str) -> None:
+    logger = get_flow_logger(interval)
     with conn.cursor() as cur:
         rows_loaded = cur.adbc_ingest(
             table_name=f"binance_ohlc_{interval}_landing",
@@ -130,8 +133,8 @@ def ingest_ohlc(table: pa.Table, conn: gizmosql.Connection, interval: str) -> No
 
 
 @task(name="upsert-binance-ohlc", persist_result=False)
-def upsert_ohlc(conn: gizmosql.Connection, interval: str) -> None:
-    logger = get_flow_logger()
+def upsert_ohlc(conn: Connection, interval: str) -> None:
+    logger = get_flow_logger(interval)
     table_name = f"binance_ohlc_{interval}"
     landing_table_name = f"binance_ohlc_{interval}_landing"
     with conn.cursor() as cur:
@@ -153,39 +156,32 @@ def upsert_ohlc(conn: gizmosql.Connection, interval: str) -> None:
 
 
 @task(name="clear-binance-ohlc-landing", persist_result=False)
-def clear_landing_table(conn: gizmosql.Connection, interval: str) -> None:
-    logger = get_flow_logger()
+def clear_landing_table(conn: Connection, interval: str) -> None:
+    logger = get_flow_logger(interval)
     with conn.cursor() as cur:
         cur.execute(f"DELETE FROM series.binance_ohlc_{interval}_landing")
         logger.info(f"Cleared `binance_ohlc_{interval}_landing` table")
 
 
-@flow(name="binance_ohlc_5m_pipeline")
-def binance_ohlc_5m_pipeline() -> None:
-    logger = get_flow_logger()
-    logger.info(f"Starting OHLC pipeline for {SYMBOL} ({INTERVAL})")
+@flow(name="binance_ohlc_pipeline")
+def binance_ohlc_pipeline(interval: str = "5m") -> None:
+    logger = get_flow_logger(interval)
+    logger.info(f"Starting OHLC pipeline for {SYMBOL} ({interval})")
 
-    with gizmosql.connect(
-        uri=GIZMOSQL_URL,
-        db_kwargs={
-            "username": GIZMOSQL_USERNAME,
-            "password": GIZMOSQL_PASSWORD,
-        },
-        autocommit=True,
-    ) as conn:
-        create_table(conn)
+    with DbManager.from_env() as conn:
+        create_table(conn, interval)
 
-        records = fetch_ohlc(SYMBOL, INTERVAL, 100)
+        records = fetch_ohlc(SYMBOL, interval, 100)
 
         if not records:
             logger.warning(f"No records fetched for {SYMBOL}, skipping ingest.")
             return
 
         table = convert_to_arrow(records)
-        ingest_ohlc(table, conn, INTERVAL)
-        upsert_ohlc(conn, INTERVAL)
-        clear_landing_table(conn, INTERVAL)
+        ingest_ohlc(table, conn, interval)
+        upsert_ohlc(conn, interval)
+        clear_landing_table(conn, interval)
 
 
 if __name__ == "__main__":
-    binance_ohlc_5m_pipeline()
+    binance_ohlc_pipeline()

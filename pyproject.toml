@@ -11,6 +11,7 @@ dependencies = [
     "httpx",
     "adbc-driver-flightsql",
     "pyarrow",
+    "tinytuya",
 ]
 
 [project.optional-dependencies]

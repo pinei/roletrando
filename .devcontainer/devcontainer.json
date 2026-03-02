@@ -1,11 +1,23 @@
 {
   "name": "prefect-dev",
+  "runArgs": ["--name", "vcs-rolatrando"],
   "build": { "dockerfile": "Dockerfile" },
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": { "moby": false }
   },
   "containerEnv": {
-    "PREFECT_API_URL": "http://host.docker.internal:4200/api"
+    "PREFECT_API_URL": "http://host.docker.internal:4200/api",
+    "NODE_OPTIONS": "--max-old-space-size=512"
   },
-  "postCreateCommand": "pip install -e '.[dev]'"
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached"
+  ],
+  "postCreateCommand": "pip install -e '.[dev]'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code"
+      ]
+    }
+  }
 }
