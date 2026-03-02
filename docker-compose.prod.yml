@@ -19,6 +19,10 @@ services:
       - GIZMOSQL_URL=${GIZMOSQL_URL}
       - GIZMOSQL_USERNAME=${GIZMOSQL_USERNAME}
       - GIZMOSQL_PASSWORD=${GIZMOSQL_PASSWORD}
+      - TUYA_DEVICE_ID=${TUYA_DEVICE_ID}
+      - TUYA_DEVICE_IP=${TUYA_DEVICE_IP}
+      - TUYA_DEVICE_KEY=${TUYA_DEVICE_KEY}
+
     volumes:
       - ./flows:/app/flows  # acesso aos flows
       - ./prefect.yaml:/app/prefect.yaml:rw  # config do worker

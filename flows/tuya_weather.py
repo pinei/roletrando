@@ -33,9 +33,10 @@ def get_flow_logger():
 @task(name="create-tuya-weather-table", persist_result=False)
 def create_table(conn: Connection) -> None:
     logger = get_flow_logger()
+
     with conn.cursor() as cur:
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS series.tuya_weather (
+            CREATE TABLE IF NOT EXISTS gizmosql_duck.series.tuya_weather (
               timestamp BIGINT,
               temperature_indoor FLOAT,
               humidity_indoor FLOAT,
@@ -43,7 +44,7 @@ def create_table(conn: Connection) -> None:
               humidity_outdoor FLOAT,
               PRIMARY KEY (timestamp)
             )
-        """)
+        """)        
     logger.info("Ensured `series.tuya_weather` table exists")
 
 
@@ -59,6 +60,7 @@ def fetch_tuya_weather() -> dict | None:
     )
 
     data = device.status()
+    logger.info(f'Data: {data}')
 
     if not data:
         logger.error("Failed to fetch Tuya Weather Station data")
@@ -125,8 +127,8 @@ def upsert_tuya_weather(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
         cur.execute("""
-            INSERT INTO series.tuya_weather
-            SELECT * FROM series.tuya_weather_landing
+            INSERT INTO gizmosql_duck.series.tuya_weather
+            SELECT * FROM gizmosql_duck.series.tuya_weather_landing
             ON CONFLICT (timestamp)
             DO UPDATE SET
               temperature_indoor = EXCLUDED.temperature_indoor,
@@ -142,7 +144,7 @@ def upsert_tuya_weather(conn: Connection) -> None:
 def clear_landing_table(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM series.tuya_weather_landing")
+        cur.execute("DELETE FROM gizmosql_duck.series.tuya_weather_landing")
         logger.info("Cleared `tuya_weather_landing` table")
 
 

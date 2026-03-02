@@ -4,6 +4,8 @@ from adbc_driver_flightsql import dbapi as gizmosql
 
 Connection = gizmosql.Connection
 
+# Apache Arrow ADBC documentation
+# https://arrow.apache.org/adbc/current/python/quickstart.html
 
 class DbManager:
     def __init__(self, url: str, username: str, password: str):

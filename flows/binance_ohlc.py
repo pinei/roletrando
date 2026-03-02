@@ -40,7 +40,7 @@ def create_table(conn: Connection, interval: str) -> None:
     logger = get_flow_logger(interval)
     with conn.cursor() as cur:
         cur.execute(f"""
-            CREATE TABLE IF NOT EXISTS series.binance_ohlc_{interval} (
+            CREATE TABLE IF NOT EXISTS gizmosql_duck.series.binance_ohlc_{interval} (
               symbol VARCHAR,
               open_timestamp TIMESTAMP,
               open FLOAT,
@@ -53,8 +53,7 @@ def create_table(conn: Connection, interval: str) -> None:
               PRIMARY KEY (symbol, open_timestamp)
             )
         """)
-        created = cur.fetchone()[0]
-        logger.info(f"Ensured `series.binance_ohlc_{interval}` table exists (created={created})")
+        logger.info(f"Ensured `series.binance_ohlc_{interval}` table exists")
 
 
 @task(name="fetch-binance-ohlc")
@@ -139,8 +138,8 @@ def upsert_ohlc(conn: Connection, interval: str) -> None:
     landing_table_name = f"binance_ohlc_{interval}_landing"
     with conn.cursor() as cur:
         cur.execute(f"""
-            INSERT INTO series.{table_name}
-            SELECT * FROM series.{landing_table_name}
+            INSERT INTO gizmosql_duck.series.{table_name}
+            SELECT * FROM gizmosql_duck.series.{landing_table_name}
             ON CONFLICT (symbol, open_timestamp)
             DO UPDATE SET
               open = EXCLUDED.open,
@@ -159,7 +158,7 @@ def upsert_ohlc(conn: Connection, interval: str) -> None:
 def clear_landing_table(conn: Connection, interval: str) -> None:
     logger = get_flow_logger(interval)
     with conn.cursor() as cur:
-        cur.execute(f"DELETE FROM series.binance_ohlc_{interval}_landing")
+        cur.execute(f"DELETE FROM gizmosql_duck.series.binance_ohlc_{interval}_landing")
         logger.info(f"Cleared `binance_ohlc_{interval}_landing` table")
 
 

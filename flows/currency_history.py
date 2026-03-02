@@ -94,9 +94,9 @@ def upsert_currency_history(conn: Connection) -> None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO series.currency_history (name, base_name, date, value)
+            INSERT INTO gizmosql_duck.series.currency_history (name, base_name, date, value)
             SELECT name, base_name, date, value
-            FROM series.currency_history_landing
+            FROM gizmosql_duck.series.currency_history_landing
             ON CONFLICT (name, base_name, date) DO UPDATE SET value = EXCLUDED.value
             """
         )
@@ -133,7 +133,7 @@ def clear_landing_table(conn: Connection) -> None:
     logger = get_flow_logger()
     logger.info("Cleared `currency_history_landing` table")
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM series.currency_history_landing")
+        cur.execute("DELETE FROM gizmosql_duck.series.currency_history_landing")
 
 
 @flow(name="currency_history_pipeline")
