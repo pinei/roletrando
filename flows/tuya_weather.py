@@ -34,17 +34,16 @@ def get_flow_logger():
 def create_table(conn: Connection) -> None:
     logger = get_flow_logger()
 
-    with conn.cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS gizmosql_duck.series.tuya_weather (
-              timestamp BIGINT,
-              temperature_indoor FLOAT,
-              humidity_indoor FLOAT,
-              temperature_outdoor FLOAT,
-              humidity_outdoor FLOAT,
-              PRIMARY KEY (timestamp)
-            )
-        """)        
+    conn.execute_ddl("""
+        CREATE TABLE IF NOT EXISTS gizmosql_duck.series.tuya_weather (
+          timestamp BIGINT,
+          temperature_indoor FLOAT,
+          humidity_indoor FLOAT,
+          temperature_outdoor FLOAT,
+          humidity_outdoor FLOAT,
+          PRIMARY KEY (timestamp)
+        )
+    """)
     logger.info("Ensured `series.tuya_weather` table exists")
 
 

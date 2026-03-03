@@ -57,9 +57,16 @@ deployments:
     work_pool:
       name: my-pool
 
-  - name: openweather-prod
-    entrypoint: flows/openweather.py:openweather_pipeline
+  - name: openweather-weather-prod
+    entrypoint: flows/openweather_weather.py:openweather_weather
     schedules:
       - cron: "*/20 * * * *"
+    work_pool:
+      name: my-pool
+
+  - name: openweather-forecast-prod
+    entrypoint: flows/openweather_forecast.py:openweather_forecast
+    schedules:
+      - cron: "*/60 * * * *"
     work_pool:
       name: my-pool

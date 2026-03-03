@@ -38,22 +38,21 @@ def get_flow_logger(interval: str):
 @task(name="create-binance-ohlc-table", persist_result=False)
 def create_table(conn: Connection, interval: str) -> None:
     logger = get_flow_logger(interval)
-    with conn.cursor() as cur:
-        cur.execute(f"""
-            CREATE TABLE IF NOT EXISTS gizmosql_duck.series.binance_ohlc_{interval} (
-              symbol VARCHAR,
-              open_timestamp TIMESTAMP,
-              open FLOAT,
-              high FLOAT,
-              low FLOAT,
-              close FLOAT,
-              volume FLOAT,
-              close_timestamp TIMESTAMP,
-              fetched_at TIMESTAMP,
-              PRIMARY KEY (symbol, open_timestamp)
-            )
-        """)
-        logger.info(f"Ensured `series.binance_ohlc_{interval}` table exists")
+    conn.execute_ddl(f"""
+        CREATE TABLE IF NOT EXISTS gizmosql_duck.series.binance_ohlc_{interval} (
+          symbol VARCHAR,
+          open_timestamp TIMESTAMP,
+          open FLOAT,
+          high FLOAT,
+          low FLOAT,
+          close FLOAT,
+          volume FLOAT,
+          close_timestamp TIMESTAMP,
+          fetched_at TIMESTAMP,
+          PRIMARY KEY (symbol, open_timestamp)
+        )
+    """)
+    logger.info(f"Ensured `series.binance_ohlc_{interval}` table exists")
 
 
 @task(name="fetch-binance-ohlc")

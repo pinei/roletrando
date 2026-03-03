@@ -2,10 +2,35 @@ import os
 
 from adbc_driver_flightsql import dbapi as gizmosql
 
-Connection = gizmosql.Connection
-
 # Apache Arrow ADBC documentation
 # https://arrow.apache.org/adbc/current/python/quickstart.html
+
+
+class Connection:
+    """Thin wrapper around a gizmosql ADBC connection.
+
+    Adds execute_ddl() which routes DDL through CommandStatementUpdate
+    (DoPut), bypassing the CommandStatementQuery path that GizmoSQL
+    does not persist for DDL.
+
+    Issue:
+    https://github.com/gizmodata/gizmosql/issues/134
+    """
+
+    def __init__(self, inner: gizmosql.Connection) -> None:
+        self._inner = inner
+
+    def cursor(self):
+        return self._inner.cursor()
+
+    def close(self) -> None:
+        self._inner.close()
+
+    def execute_ddl(self, sql: str) -> None:
+        with self._inner.cursor() as cur:
+            cur._stmt.set_sql_query(sql)
+            cur._stmt.execute_update()
+
 
 class DbManager:
     def __init__(self, url: str, username: str, password: str):
@@ -15,11 +40,12 @@ class DbManager:
         self._conn: Connection | None = None
 
     def __enter__(self) -> Connection:
-        self._conn = gizmosql.connect(
+        inner = gizmosql.connect(
             uri=self._url,
             db_kwargs={"username": self._username, "password": self._password},
             autocommit=True,
         )
+        self._conn = Connection(inner)
         return self._conn
 
     def __exit__(self, *args) -> None:
