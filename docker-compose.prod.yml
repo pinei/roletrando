@@ -22,6 +22,7 @@ services:
       - TUYA_DEVICE_ID=${TUYA_DEVICE_ID}
       - TUYA_DEVICE_IP=${TUYA_DEVICE_IP}
       - TUYA_DEVICE_KEY=${TUYA_DEVICE_KEY}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
 
     volumes:
       - ./flows:/app/flows  # acesso aos flows

@@ -1,6 +1,10 @@
 name: roletrando
 prefect-version: "3.6"
 
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /app
+
 deployments:
   - name: binance-ohlc-5m-prod
     entrypoint: flows/binance_ohlc.py:binance_ohlc_pipeline
@@ -50,5 +54,12 @@ deployments:
     entrypoint: flows/tuya_weather.py:tuya_weather_pipeline
     schedules:
       - cron: "*/5 * * * *"
+    work_pool:
+      name: my-pool
+
+  - name: openweather-prod
+    entrypoint: flows/openweather.py:openweather_pipeline
+    schedules:
+      - cron: "*/20 * * * *"
     work_pool:
       name: my-pool
