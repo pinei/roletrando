@@ -34,7 +34,8 @@ def get_flow_logger():
 def create_table(conn: Connection) -> None:
     logger = get_flow_logger()
 
-    conn.execute_ddl("""
+    with conn.cursor() as cur:
+        cur.execute("""
         CREATE TABLE IF NOT EXISTS gizmosql_duck.series.tuya_weather (
           timestamp BIGINT,
           temperature_indoor FLOAT,
@@ -135,8 +136,7 @@ def upsert_tuya_weather(conn: Connection) -> None:
               temperature_outdoor = EXCLUDED.temperature_outdoor,
               humidity_outdoor = EXCLUDED.humidity_outdoor
         """)
-        rows_loaded = cur.fetchone()[0]
-        logger.info(f"Upserted {rows_loaded} rows into `tuya_weather` table")
+        logger.info(f"Upserted {cur.rowcount} rows into `tuya_weather` table")
 
 
 @task(name="clear-tuya-weather-landing", persist_result=False)

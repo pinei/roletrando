@@ -100,8 +100,7 @@ def upsert_currency_history(conn: Connection) -> None:
             ON CONFLICT (name, base_name, date) DO UPDATE SET value = EXCLUDED.value
             """
         )
-        rows_loaded = cur.fetchone()[0]
-        logger.info(f"Upserted {rows_loaded} rows into `currency_history` table")
+        logger.info(f"Upserted {cur.rowcount} rows into `currency_history` table")
 
 @task(name="fetch_currency_history")
 def fetch_currency_history(

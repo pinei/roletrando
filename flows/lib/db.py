@@ -26,12 +26,6 @@ class Connection:
     def close(self) -> None:
         self._inner.close()
 
-    def execute_ddl(self, sql: str) -> None:
-        with self._inner.cursor() as cur:
-            cur._stmt.set_sql_query(sql)
-            cur._stmt.execute_update()
-
-
 class DbManager:
     def __init__(self, url: str, username: str, password: str):
         self._url = url

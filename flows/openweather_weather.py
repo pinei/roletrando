@@ -33,29 +33,30 @@ def get_flow_logger():
 def create_weather_table(conn: Connection) -> None:
     logger = get_flow_logger()
 
-    conn.execute_ddl("""
-        CREATE TABLE IF NOT EXISTS gizmosql_duck.series.openweather_weather (
-          city VARCHAR,
-          country VARCHAR,
-          temperature FLOAT,
-          feels_like FLOAT,
-          min_temp FLOAT,
-          max_temp FLOAT,
-          humidity INTEGER,
-          pressure INTEGER,
-          wind_speed FLOAT,
-          wind_deg INTEGER,
-          weather VARCHAR,
-          description VARCHAR,
-          icon VARCHAR,
-          sunrise BIGINT,
-          sunset BIGINT,
-          timestamp BIGINT,
-          timezone INTEGER,
-          fetched_at TIMESTAMP,
-          PRIMARY KEY (city, country, timestamp)
-        )
-    """)
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS gizmosql_duck.series.openweather_weather (
+            city VARCHAR,
+            country VARCHAR,
+            temperature FLOAT,
+            feels_like FLOAT,
+            min_temp FLOAT,
+            max_temp FLOAT,
+            humidity INTEGER,
+            pressure INTEGER,
+            wind_speed FLOAT,
+            wind_deg INTEGER,
+            weather VARCHAR,
+            description VARCHAR,
+            icon VARCHAR,
+            sunrise BIGINT,
+            sunset BIGINT,
+            timestamp BIGINT,
+            timezone INTEGER,
+            fetched_at TIMESTAMP,
+            PRIMARY KEY (city, country, timestamp)
+            )
+        """)
 
     logger.info("Ensured `series.openweather` table exists")
 
@@ -161,8 +162,7 @@ def upsert_weather(conn: Connection) -> None:
               timezone = EXCLUDED.timezone,
               fetched_at = EXCLUDED.fetched_at
         """)
-        rows_loaded = cur.fetchone()[0]
-        logger.info(f"Upserted {rows_loaded} rows into `openweather_weather` table")
+        logger.info(f"Upserted {cur.rowcount} rows into `openweather_weather` table")
 
 
 @task(name="clear-weather-landing", persist_result=False)
