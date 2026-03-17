@@ -9,7 +9,7 @@ requires-python = ">=3.12"
 dependencies = [
     "prefect>=3",
     "httpx",
-    "adbc-driver-flightsql",
+    "adbc-driver-gizmosql",
     "pyarrow",
     "tinytuya",
 ]

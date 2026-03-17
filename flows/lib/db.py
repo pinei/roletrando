@@ -1,6 +1,6 @@
 import os
 
-from adbc_driver_flightsql import dbapi as gizmosql
+from adbc_driver_gizmosql import dbapi as gizmosql
 
 # Apache Arrow ADBC documentation
 # https://arrow.apache.org/adbc/current/python/quickstart.html
