@@ -70,3 +70,10 @@ deployments:
       - cron: "*/60 * * * *"
     work_pool:
       name: my-pool
+
+  - name: currency-spot-prod
+    entrypoint: flows/currency_spot.py:currency_spot_pipeline
+    schedules:
+      - cron: "*/15 * * * *"
+    work_pool:
+      name: my-pool

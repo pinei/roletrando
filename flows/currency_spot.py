@@ -36,7 +36,7 @@ def create_currency_spot_table(conn: Connection) -> None:
                 name       VARCHAR,
                 base_name  VARCHAR,
                 fetch_time TIMESTAMP,
-                value      FLOAT,
+                value      DECIMAL(10,4),
                 PRIMARY KEY (name, base_name)
             )
         """)
@@ -109,10 +109,10 @@ def currency_spot_pipeline() -> None:
         schema = pa.schema([
             ("name", pa.string()),
             ("base_name", pa.string()),
-            ("fetch_time", pa.timestamp("us")),
+            ("fetch_time", pa.timestamp('s')),
             ("value", pa.float32()),
         ])
-        table = pa.table(cols, names=["name", "base_name", "fetch_time", "value"], schema=schema)
+        table = pa.table(cols, schema=schema)
 
         ingest_currency_spot(table, conn)
         upsert_currency_spot(conn)
