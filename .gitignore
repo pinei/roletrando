@@ -22,3 +22,6 @@ build/
 
 # Binaries
 bin/
+
+# Mac
+.DS_Store
