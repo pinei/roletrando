@@ -14,6 +14,9 @@ SCHEMA = 'gizmosql_duck.despesas'
 TABLE_DESPESA = 'despesa'
 TABLE_CORRENTE_BRL = 'despesas_corrente_brl'
 TABLE_PARCELADAS = 'despesas_parceladas'
+VIEW_CATEGORIA = 'vw_categoria'
+VIEW_GRUPO = 'vw_grupo'
+TABLE_CATEGORIA_GOLD = 'despesas_categoria_gold'
 
 
 def get_flow_logger():
@@ -129,6 +132,57 @@ def create_despesas_parceladas(conn: Connection) -> None:
     logger.info(f"Created `{TABLE_PARCELADAS}`")
 
 
+@task(name="create-view-categoria", persist_result=False)
+def create_view_categoria(conn: Connection) -> None:
+    logger = get_flow_logger()
+    with conn.cursor() as cur:
+        cur.execute(f"""
+            CREATE OR REPLACE VIEW {SCHEMA}.{VIEW_CATEGORIA} AS
+            SELECT DISTINCT categoria, grupo
+            FROM {SCHEMA}.{TABLE_PARCELADAS}
+            WHERE categoria IS NOT NULL
+              AND LEN(TRIM(categoria)) > 0
+              AND categoria NOT IN ('Bens')
+        """)
+    logger.info(f"Created view `{VIEW_CATEGORIA}`")
+
+
+@task(name="create-view-grupo", persist_result=False)
+def create_view_grupo(conn: Connection) -> None:
+    logger = get_flow_logger()
+    with conn.cursor() as cur:
+        cur.execute(f"""
+            CREATE OR REPLACE VIEW {SCHEMA}.{VIEW_GRUPO} AS
+            SELECT DISTINCT grupo
+            FROM {SCHEMA}.{TABLE_PARCELADAS}
+            WHERE grupo IS NOT NULL
+              AND LEN(TRIM(grupo)) > 0
+              AND grupo NOT IN ('#N/A', 'Bens')
+        """)
+    logger.info(f"Created view `{VIEW_GRUPO}`")
+
+
+@task(name="create-despesas-categoria-gold", persist_result=False)
+def create_despesas_categoria_gold(conn: Connection) -> None:
+    logger = get_flow_logger()
+    with conn.cursor() as cur:
+        cur.execute(f"""
+            CREATE OR REPLACE TABLE {SCHEMA}.{TABLE_CATEGORIA_GOLD} AS
+            SELECT
+                d.mes,
+                c.categoria,
+                g.grupo,
+                ROUND(SUM(d.valor), 2) AS valor_total
+            FROM {SCHEMA}.{VIEW_GRUPO} g
+            LEFT OUTER JOIN {SCHEMA}.{VIEW_CATEGORIA} c ON c.grupo = g.grupo
+            LEFT OUTER JOIN {SCHEMA}.{TABLE_PARCELADAS} d ON c.categoria = d.categoria
+            WHERE d.mes < strftime(current_date, '%Y-%m')
+            GROUP BY ALL
+            ORDER BY mes
+        """)
+    logger.info(f"Created `{TABLE_CATEGORIA_GOLD}`")
+
+
 @flow(name="despesas_processamento")
 def despesas_processamento() -> None:
     logger = get_flow_logger()
@@ -138,6 +192,9 @@ def despesas_processamento() -> None:
         create_despesa(conn)
         create_despesas_corrente_brl(conn)
         create_despesas_parceladas(conn)
+        create_view_categoria(conn)
+        create_view_grupo(conn)
+        create_despesas_categoria_gold(conn)
 
 
 if __name__ == "__main__":
