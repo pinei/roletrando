@@ -23,10 +23,15 @@ services:
       - TUYA_DEVICE_IP=${TUYA_DEVICE_IP}
       - TUYA_DEVICE_KEY=${TUYA_DEVICE_KEY}
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+      - OILPRICE_API_KEY=${OILPRICE_API_KEY}
+      - FRED_API_KEY=${FRED_API_KEY}
+      
 
     volumes:
       - ./flows:/app/flows  # acesso aos flows
+      - ./secrets:/app/secrets # secrets
       - ./prefect.yaml:/app/prefect.yaml:rw  # config do worker
+
     depends_on:
       - prefect-server
     restart: unless-stopped
