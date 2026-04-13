@@ -121,7 +121,7 @@ def ingest_oilprice_history(table: pa.Table, conn: Connection) -> None:
         rows_loaded = cur.adbc_ingest(
             table_name=LANDING_TABLE,
             data=table,
-            mode="append",
+            mode="replace",
             catalog_name="gizmosql_duck",
             db_schema_name="series",
         )
