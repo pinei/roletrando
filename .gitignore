@@ -2,7 +2,7 @@
 .env
 .env.*
 !.env.example
-despesas/cashappy_service_account.json
+secrets/
 
 # Python
 __pycache__/

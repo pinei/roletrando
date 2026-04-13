@@ -30,7 +30,7 @@ def get_flow_logger():
 @task(name="load-credentials", persist_result=False)
 def load_credentials() -> dict | None:
     logger = get_flow_logger()
-    cred_path = Path(__file__).parents[1] / "despesas" / "cashappy_service_account.json"
+    cred_path = Path(__file__).parents[1] / "secrets" / "cashappy_service_account.json"
     try:
         with cred_path.open("r", encoding="utf-8") as file:
             creds_json_str = file.read()
