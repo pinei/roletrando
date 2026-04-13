@@ -12,6 +12,8 @@ dependencies = [
     "adbc-driver-gizmosql",
     "pyarrow",
     "tinytuya",
+    "gspread",
+    "pandas",
 ]
 
 [project.optional-dependencies]
