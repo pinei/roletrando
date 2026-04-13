@@ -92,6 +92,13 @@ deployments:
     work_pool:
       name: my-pool
 
+  - name: oilprice-history-prod
+    entrypoint: flows/oilprice_history.py:oilprice_history_pipeline
+    schedules:
+      - cron: "0 9 * * 1-5"
+    work_pool:
+      name: my-pool
+
   - name: oilprice-spot-prod
     entrypoint: flows/oilprice_spot.py:oilprice_spot_pipeline
     schedules:
