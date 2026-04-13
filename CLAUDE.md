@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Specs
+
+Detailed specifications for developing in this project:
+
+- [.claude/specs/flow-spec.md](.claude/specs/flow-spec.md) — conventions for building Prefect flows and tasks: naming, `@task` vs plain function, logger pattern, PyArrow vs Pandas, ETL task order, sub-flow orchestration.
+- [.claude/specs/db-spec.md](.claude/specs/db-spec.md) — database interaction patterns: `DbManager`, landing table pattern, ingest/upsert/clear sequence, table naming, DuckDB types.
+
 ## Project Overview
 
 **RoleTraNDO** is a Prefect-based data pipeline that fetches Brazilian currency exchange rates from Brazil's Central Bank (BCB) API and ingests them into a GizmoSQL data warehouse via Arrow Flight SQL.
