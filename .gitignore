@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+despesas/cashappy_service_account.json
 
 # Python
 __pycache__/
