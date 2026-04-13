@@ -26,6 +26,8 @@ from flows.lib.db import DbManager, Connection
 BINANCE_BASE_URL = "https://api.binance.com/api/v3/klines"
 SYMBOL = "BTCUSDT"
 
+SCHEMA = 'gizmosql_duck.series'
+
 
 def get_flow_logger(interval: str):
     class PrefixLoggerAdapter(logging.LoggerAdapter):
@@ -40,7 +42,7 @@ def create_table(conn: Connection, interval: str) -> None:
     logger = get_flow_logger(interval)
     with conn.cursor() as cur:
         cur.execute(f"""
-            CREATE TABLE IF NOT EXISTS gizmosql_duck.series.binance_ohlc_{interval} (
+            CREATE TABLE IF NOT EXISTS {SCHEMA}.binance_ohlc_{interval} (
             symbol VARCHAR,
             open_timestamp TIMESTAMP,
             open FLOAT,
@@ -138,8 +140,8 @@ def upsert_ohlc(conn: Connection, interval: str) -> None:
     landing_table_name = f"binance_ohlc_{interval}_landing"
     with conn.cursor() as cur:
         cur.execute(f"""
-            INSERT INTO gizmosql_duck.series.{table_name}
-            SELECT * FROM gizmosql_duck.series.{landing_table_name}
+            INSERT INTO {SCHEMA}.{table_name}
+            SELECT * FROM {SCHEMA}.{landing_table_name}
             ON CONFLICT (symbol, open_timestamp)
             DO UPDATE SET
               open = EXCLUDED.open,
@@ -157,7 +159,7 @@ def upsert_ohlc(conn: Connection, interval: str) -> None:
 def clear_landing_table(conn: Connection, interval: str) -> None:
     logger = get_flow_logger(interval)
     with conn.cursor() as cur:
-        cur.execute(f"DELETE FROM gizmosql_duck.series.binance_ohlc_{interval}_landing")
+        cur.execute(f"DELETE FROM {SCHEMA}.binance_ohlc_{interval}_landing")
         logger.info(f"Cleared `binance_ohlc_{interval}_landing` table")
 
 

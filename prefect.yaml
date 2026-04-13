@@ -77,3 +77,24 @@ deployments:
       - cron: "*/15 * * * *"
     work_pool:
       name: my-pool
+
+  - name: despesas-pipeline-prod
+    entrypoint: flows/despesas.py:despesas_pipeline
+    schedules:
+      - cron: "0 4 * * *"
+    work_pool:
+      name: my-pool
+
+  - name: oilprice-fred-history-prod
+    entrypoint: flows/oilprice_fred_history.py:oilprice_fred_history_pipeline
+    schedules:
+      - cron: "0 6 * * 1-5"
+    work_pool:
+      name: my-pool
+
+  - name: oilprice-spot-prod
+    entrypoint: flows/oilprice_spot.py:oilprice_spot_pipeline
+    schedules:
+      - cron: "*/15 * * * *"
+    work_pool:
+      name: my-pool

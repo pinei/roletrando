@@ -20,6 +20,10 @@ LOCATIONS = [
     {"lat": "54.9783", "lon": "-1.6174"},    # Newcastle Upon Tyne, UK
 ]
 
+SCHEMA = 'gizmosql_duck.series'
+SILVER_TABLE = 'openweather_weather'
+LANDING_TABLE = 'openweather_weather_landing'
+
 
 def get_flow_logger():
     class PrefixLoggerAdapter(logging.LoggerAdapter):
@@ -34,8 +38,8 @@ def create_weather_table(conn: Connection) -> None:
     logger = get_flow_logger()
 
     with conn.cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS gizmosql_duck.series.openweather_weather (
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS {SCHEMA}.{SILVER_TABLE} (
             city VARCHAR,
             country VARCHAR,
             temperature FLOAT,
@@ -58,7 +62,7 @@ def create_weather_table(conn: Connection) -> None:
             )
         """)
 
-    logger.info("Ensured `series.openweather` table exists")
+    logger.info(f"Ensured `{SILVER_TABLE}` table exists")
 
 
 @task(name="fetch-weather")
@@ -128,22 +132,22 @@ def ingest_weather(table: pa.Table, conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
         rows_loaded = cur.adbc_ingest(
-            table_name="openweather_weather_landing",
+            table_name=LANDING_TABLE,
             data=table,
             mode="replace",
             catalog_name="gizmosql_duck",
             db_schema_name="series",
         )
-        logger.info(f"Loaded {rows_loaded} rows into `openweather_weather_landing` table")
+        logger.info(f"Loaded {rows_loaded} rows into `{LANDING_TABLE}` table")
 
 
 @task(name="upsert-weather", persist_result=False)
 def upsert_weather(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO gizmosql_duck.series.openweather_weather
-            SELECT * FROM gizmosql_duck.series.openweather_weather_landing
+        cur.execute(f"""
+            INSERT INTO {SCHEMA}.{SILVER_TABLE}
+            SELECT * FROM {SCHEMA}.{LANDING_TABLE}
             ON CONFLICT (city, country, timestamp)
             DO UPDATE SET
               temperature = EXCLUDED.temperature,
@@ -162,15 +166,15 @@ def upsert_weather(conn: Connection) -> None:
               timezone = EXCLUDED.timezone,
               fetched_at = EXCLUDED.fetched_at
         """)
-        logger.info(f"Upserted {cur.rowcount} rows into `openweather_weather` table")
+        logger.info(f"Upserted {cur.rowcount} rows into `{SILVER_TABLE}` table")
 
 
 @task(name="clear-weather-landing", persist_result=False)
 def clear_weather_landing(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM gizmosql_duck.series.openweather_weather_landing")
-        logger.info("Cleared `openweather_weather_landing` table")
+        cur.execute(f"DELETE FROM {SCHEMA}.{LANDING_TABLE}")
+        logger.info(f"Cleared `{LANDING_TABLE}` table")
 
 
 @flow(name="openweather_weather")

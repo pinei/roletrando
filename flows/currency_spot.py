@@ -18,6 +18,10 @@ from flows.lib.db import DbManager, Connection
 
 AWESOMEAPI_URL = "https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL,GBP-BRL"
 
+SCHEMA = 'gizmosql_duck.series'
+SILVER_TABLE = 'currency_spot'
+LANDING_TABLE = 'currency_spot_landing'
+
 
 def get_flow_logger():
     class PrefixLoggerAdapter(logging.LoggerAdapter):
@@ -31,8 +35,8 @@ def get_flow_logger():
 def create_currency_spot_table(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS gizmosql_duck.series.currency_spot (
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS {SCHEMA}.{SILVER_TABLE} (
                 name       VARCHAR,
                 base_name  VARCHAR,
                 fetch_time TIMESTAMP,
@@ -40,7 +44,7 @@ def create_currency_spot_table(conn: Connection) -> None:
                 PRIMARY KEY (name, base_name)
             )
         """)
-    logger.info("Ensured `series.currency_spot` table exists")
+    logger.info(f"Ensured `{SILVER_TABLE}` table exists")
 
 
 @task(name="fetch-currency-spot")
@@ -68,28 +72,28 @@ def ingest_currency_spot(table: pa.Table, conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
         rows_loaded = cur.adbc_ingest(
-            table_name="currency_spot_landing",
+            table_name=LANDING_TABLE,
             data=table,
             mode="replace",
             catalog_name="gizmosql_duck",
             db_schema_name="series",
         )
-        logger.info(f"Loaded {rows_loaded} rows into `currency_spot_landing` table")
+        logger.info(f"Loaded {rows_loaded} rows into `{LANDING_TABLE}` table")
 
 
 @task(name="upsert-currency-spot", persist_result=False)
 def upsert_currency_spot(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO gizmosql_duck.series.currency_spot (name, base_name, fetch_time, value)
+        cur.execute(f"""
+            INSERT INTO {SCHEMA}.{SILVER_TABLE} (name, base_name, fetch_time, value)
             SELECT name, base_name, fetch_time, value
-            FROM gizmosql_duck.series.currency_spot_landing
+            FROM {SCHEMA}.{LANDING_TABLE}
             ON CONFLICT (name, base_name) DO UPDATE SET
                 fetch_time = EXCLUDED.fetch_time,
                 value = EXCLUDED.value
         """)
-        logger.info(f"Upserted {cur.rowcount} rows into `currency_spot` table")
+        logger.info(f"Upserted {cur.rowcount} rows into `{SILVER_TABLE}` table")
 
 
 @flow(name="currency_spot_pipeline")

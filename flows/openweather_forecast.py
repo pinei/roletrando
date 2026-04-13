@@ -21,6 +21,9 @@ LOCATIONS = [
     {"lat": "54.9783", "lon": "-1.6174"},    # Newcastle Upon Tyne, UK
 ]
 
+SCHEMA = 'gizmosql_duck.series'
+LANDING_TABLE = 'forecast_data'
+
 
 def get_flow_logger():
     class PrefixLoggerAdapter(logging.LoggerAdapter):
@@ -93,13 +96,13 @@ def ingest_forecast(table: pa.Table, conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
         rows_loaded = cur.adbc_ingest(
-            table_name="forecast_data",
+            table_name=LANDING_TABLE,
             data=table,
             mode="replace",
             catalog_name="gizmosql_duck",
             db_schema_name="series",
         )
-        logger.info(f"Loaded {rows_loaded} rows into `forecast_data` table")
+        logger.info(f"Loaded {rows_loaded} rows into `{LANDING_TABLE}` table")
 
 
 @flow(name="openweather_forecast")

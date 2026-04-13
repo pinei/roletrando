@@ -21,6 +21,10 @@ TUYA_DEVICE_ID = os.environ["TUYA_DEVICE_ID"]
 TUYA_DEVICE_IP = os.environ["TUYA_DEVICE_IP"]
 TUYA_DEVICE_KEY = os.environ["TUYA_DEVICE_KEY"]
 
+SCHEMA = 'gizmosql_duck.series'
+SILVER_TABLE = 'tuya_weather'
+LANDING_TABLE = 'tuya_weather_landing'
+
 
 def get_flow_logger():
     class PrefixLoggerAdapter(logging.LoggerAdapter):
@@ -35,8 +39,8 @@ def create_table(conn: Connection) -> None:
     logger = get_flow_logger()
 
     with conn.cursor() as cur:
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS gizmosql_duck.series.tuya_weather (
+        cur.execute(f"""
+        CREATE TABLE IF NOT EXISTS {SCHEMA}.{SILVER_TABLE} (
           timestamp BIGINT,
           temperature_indoor FLOAT,
           humidity_indoor FLOAT,
@@ -45,7 +49,7 @@ def create_table(conn: Connection) -> None:
           PRIMARY KEY (timestamp)
         )
     """)
-    logger.info("Ensured `series.tuya_weather` table exists")
+    logger.info(f"Ensured `{SILVER_TABLE}` table exists")
 
 
 @task(name="fetch-tuya-weather")
@@ -113,22 +117,22 @@ def ingest_tuya_weather(table: pa.Table, conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
         rows_loaded = cur.adbc_ingest(
-            table_name="tuya_weather_landing",
+            table_name=LANDING_TABLE,
             data=table,
             mode="replace",
             catalog_name="gizmosql_duck",
             db_schema_name="series",
         )
-        logger.info(f"Loaded {rows_loaded} rows into `tuya_weather_landing` table")
+        logger.info(f"Loaded {rows_loaded} rows into `{LANDING_TABLE}` table")
 
 
 @task(name="upsert-tuya-weather", persist_result=False)
 def upsert_tuya_weather(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO gizmosql_duck.series.tuya_weather
-            SELECT * FROM gizmosql_duck.series.tuya_weather_landing
+        cur.execute(f"""
+            INSERT INTO {SCHEMA}.{SILVER_TABLE}
+            SELECT * FROM {SCHEMA}.{LANDING_TABLE}
             ON CONFLICT (timestamp)
             DO UPDATE SET
               temperature_indoor = EXCLUDED.temperature_indoor,
@@ -136,15 +140,15 @@ def upsert_tuya_weather(conn: Connection) -> None:
               temperature_outdoor = EXCLUDED.temperature_outdoor,
               humidity_outdoor = EXCLUDED.humidity_outdoor
         """)
-        logger.info(f"Upserted {cur.rowcount} rows into `tuya_weather` table")
+        logger.info(f"Upserted {cur.rowcount} rows into `{SILVER_TABLE}` table")
 
 
 @task(name="clear-tuya-weather-landing", persist_result=False)
 def clear_landing_table(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM gizmosql_duck.series.tuya_weather_landing")
-        logger.info("Cleared `tuya_weather_landing` table")
+        cur.execute(f"DELETE FROM {SCHEMA}.{LANDING_TABLE}")
+        logger.info(f"Cleared `{LANDING_TABLE}` table")
 
 
 @flow(name="tuya_weather_pipeline")

@@ -22,6 +22,10 @@ CURRENCY_CODES = {
     "GBP": "21623",  # Libra esterlina
 }
 
+SCHEMA = 'gizmosql_duck.series'
+SILVER_TABLE = 'currency_history'
+LANDING_TABLE = 'currency_history_landing'
+
 def get_flow_logger():
     class PrefixLoggerAdapter(logging.LoggerAdapter):
         def process(self, msg, kwargs):
@@ -80,27 +84,27 @@ def ingest_currency_history(table: pa.Table, conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
         rows_loaded = cur.adbc_ingest(
-            table_name="currency_history_landing",
+            table_name=LANDING_TABLE,
             data=table,
             mode="append",
             catalog_name="gizmosql_duck",
             db_schema_name="series",
         )
-        logger.info(f"Loaded {rows_loaded} rows into `currency_history_landing` table")
+        logger.info(f"Loaded {rows_loaded} rows into `{LANDING_TABLE}` table")
 
 @task(name="upsert-currency-history", persist_result=False)
 def upsert_currency_history(conn: Connection) -> None:
     logger = get_flow_logger()
     with conn.cursor() as cur:
         cur.execute(
-            """
-            INSERT INTO gizmosql_duck.series.currency_history (name, base_name, date, value)
+            f"""
+            INSERT INTO {SCHEMA}.{SILVER_TABLE} (name, base_name, date, value)
             SELECT name, base_name, date, value
-            FROM gizmosql_duck.series.currency_history_landing
+            FROM {SCHEMA}.{LANDING_TABLE}
             ON CONFLICT (name, base_name, date) DO UPDATE SET value = EXCLUDED.value
             """
         )
-        logger.info(f"Upserted {cur.rowcount} rows into `currency_history` table")
+        logger.info(f"Upserted {cur.rowcount} rows into `{SILVER_TABLE}` table")
 
 @task(name="fetch_currency_history")
 def fetch_currency_history(
@@ -132,7 +136,7 @@ def clear_landing_table(conn: Connection) -> None:
     logger = get_flow_logger()
     logger.info("Cleared `currency_history_landing` table")
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM gizmosql_duck.series.currency_history_landing")
+        cur.execute(f"DELETE FROM {SCHEMA}.{LANDING_TABLE}")
 
 
 @flow(name="currency_history_pipeline")
