@@ -3,7 +3,6 @@
   "runArgs": ["--name", "vcs-rolatrando"],
   "build": { "dockerfile": "Dockerfile" },
   "features": {
-    /* "ghcr.io/devcontainers/features/docker-in-docker:2": { "moby": false } */
   },
   "containerEnv": {
     "PREFECT_API_URL": "http://host.docker.internal:4200/api",
