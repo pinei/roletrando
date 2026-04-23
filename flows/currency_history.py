@@ -43,6 +43,9 @@ def fetch_currency_data(
     end_date: str,
 ) -> list[tuple]:
     logger = get_flow_logger()
+
+    # Exemplos:
+    # - https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados?formato=json&dataInicial=21/03/2026&dataFinal=20/04/2026
     url = (
         f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{series_code}/dados"
         f"?formato=json&dataInicial={start_date}&dataFinal={end_date}"
@@ -106,65 +109,57 @@ def upsert_currency_history(conn: Connection) -> None:
         )
         logger.info(f"Upserted {cur.rowcount} rows into `{SILVER_TABLE}` table")
 
-@task(name="fetch_currency_history")
-def fetch_currency_history(
-    currency_name: str,
-    series_code: str,
-    currency_base: str = "BRL",
-    start_date: str = (datetime.now() - timedelta(days=30)).strftime("%d/%m/%Y"),
-    end_date: str = datetime.now().strftime("%d/%m/%Y"),
-) -> pa.Table | None:
+@task(name="fetch-currencies-history")
+def fetch_currencies_history(start_date: str, end_date: str) -> pa.Table | None:
     logger = get_flow_logger()
-    records = fetch_currency_data(
-        currency_name=currency_name,
-        currency_base=currency_base,
-        series_code=series_code,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    if not records:
-        logger.warning(f"No data returned for {currency_name}, skipping.")
+    all_records: list[tuple] = []
+    for currency_name, series_code in CURRENCY_CODES.items():
+        records = fetch_currency_data(
+            currency_name=currency_name,
+            currency_base="BRL",
+            series_code=series_code,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if records:
+            all_records.extend(records)
+        else:
+            logger.warning(f"No data returned for {currency_name}, skipping.")
+
+    if not all_records:
         return None
 
-    columns = list(zip(*records))
-    columns_names = ["name", "base_name", "date", "value"]
+    cols = list(zip(*all_records))
+    return pa.table(cols, names=["name", "base_name", "date", "value"])
 
-    return pa.table(columns, names=columns_names)
 
-@task(name="clear_landing_table", persist_result=False)
+@task(name="clear-currency-history-landing", persist_result=False)
 def clear_landing_table(conn: Connection) -> None:
     logger = get_flow_logger()
-    logger.info("Cleared `currency_history_landing` table")
     with conn.cursor() as cur:
         cur.execute(f"DELETE FROM {SCHEMA}.{LANDING_TABLE}")
+    logger.info(f"Cleared `{LANDING_TABLE}` table")
 
 
 @flow(name="currency_history_pipeline")
 def currency_history_pipeline() -> None:
     logger = get_flow_logger()
-    # 30 days
     start_date = (datetime.now() - timedelta(days=30)).strftime("%d/%m/%Y")
     end_date = datetime.now().strftime("%d/%m/%Y")
 
     logger.info(f"Fetching currency history from {start_date} to {end_date}")
 
+    table = fetch_currencies_history(start_date, end_date)
+    if table is None:
+        logger.warning("No data fetched for any currency, aborting.")
+        return
+
+    logger.info(f"Upserting {table.num_rows} records...")
+
     with DbManager.from_env() as conn:
-        for currency_name, series_code in CURRENCY_CODES.items():
-            table = fetch_currency_history(
-                currency_name=currency_name,
-                series_code=series_code,
-                start_date=start_date,
-                end_date=end_date,
-            )
-
-            if table is not None:
-                ingest_currency_history(table, conn)
-
+        ingest_currency_history(table, conn)
         upsert_currency_history(conn)
         clear_landing_table(conn)
-
-
-
 
 if __name__ == "__main__":
     currency_history_pipeline()
