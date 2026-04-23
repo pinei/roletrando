@@ -1,6 +1,6 @@
 services:
   prefect-server:
-    image: prefecthq/prefect:3.6-python3.10
+    image: prefecthq/prefect:3.6.28.dev4-python3.11
     environment:
       PREFECT_SERVER_API_HOST: 0.0.0.0
     entrypoint: [ "prefect", "server", "start" ]
@@ -25,7 +25,11 @@ services:
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
       - OILPRICE_API_KEY=${OILPRICE_API_KEY}
       - FRED_API_KEY=${FRED_API_KEY}
-      
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LARANJEIRA_MATRIX_TOKEN=${LARANJEIRA_MATRIX_TOKEN}
+      - LARANJEIRA_MATRIX_HOMESERVER=${LARANJEIRA_MATRIX_HOMESERVER}
+      - LARANJEIRA_MATRIX_ROOM_ID=${LARANJEIRA_MATRIX_ROOM_ID}
 
     volumes:
       - ./flows:/app/flows  # acesso aos flows
