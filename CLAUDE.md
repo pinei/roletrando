@@ -67,6 +67,10 @@ Command to start production (run outside devcontaner)
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 ```
+Command to restart worker after updating flows and prefect.yaml
+```bash
+docker compose -f docker-compose.prod.yml restart prefect-worker
+````
 
 Command to start bash in `prefect-worker` (run outside devcontaner)
 ```bash
