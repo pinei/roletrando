@@ -105,3 +105,10 @@ deployments:
       - cron: "*/15 * * * *"
     work_pool:
       name: my-pool
+
+  - name: noticias-flazoeiro-prod
+    entrypoint: flows/noticias_flazoeiro_orchestrator.py:noticias_flazoeiro_orchestrator
+    schedules:
+      - cron: "0 */3 * * *"
+    work_pool:
+      name: my-pool

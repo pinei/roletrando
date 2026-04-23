@@ -37,15 +37,40 @@ def _api_key() -> str:
     return os.environ["YOUTUBE_API_KEY"]
 
 
-@task(name="fetch-flazoeiro-latest-video")
-def fetch_latest_video() -> dict | None:
+def _parse_video(item: dict) -> dict:
+    snippet = item["snippet"]
+    thumbnails = snippet.get("thumbnails", {})
+    thumbnail_url = (
+        thumbnails.get("maxres")
+        or thumbnails.get("high")
+        or thumbnails.get("medium")
+        or thumbnails.get("default")
+        or {}
+    ).get("url")
+    return {
+        "url":           f"https://www.youtube.com/watch?v={item['id']}",
+        "published_at":  datetime.fromisoformat(snippet["publishedAt"].replace("Z", "+00:00")),
+        "channel_id":    snippet["channelId"],
+        "channel_title": snippet["channelTitle"],
+        "title":         snippet["title"],
+        "description":   snippet["description"],
+        "tags":          snippet.get("tags", []),
+        "duration":      item["contentDetails"]["duration"],
+        "thumbnail_url": thumbnail_url,
+    }
+
+
+@task(name="fetch-flazoeiro-latest-videos", persist_result=False)
+def fetch_latest_videos(conn: Connection) -> list[dict]:
     """
-    Obtém o vídeo mais recente do canal @FLAZOEIRO via YouTube Data API v3.
+    Obtém os 5 vídeos mais recentes do canal @FLAZOEIRO, filtrando os que
+    já existem na SILVER_TABLE.
 
     Fluxo:
     1. channels.list      — obtém uploads_playlist_id pelo handle do canal
-    2. playlistItems.list — obtém o video_id mais recente da playlist
-    3. videos.list        — obtém title, published_at e description completa
+    2. playlistItems.list — obtém os 5 video_ids mais recentes da playlist
+    3. Filtra os já existentes na silver table
+    4. videos.list        — obtém detalhes completos dos novos
     """
     logger = get_flow_logger()
 
@@ -59,68 +84,56 @@ def fetch_latest_video() -> dict | None:
     items = resp.json().get("items", [])
     if not items:
         logger.warning(f"Canal @{CHANNEL_HANDLE} não encontrado")
-        return None
+        return []
 
     uploads_playlist_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
     logger.info(f"Uploads playlist: {uploads_playlist_id}")
 
-    # 2. Obtém o vídeo mais recente da playlist
+    # 2. Obtém os 5 vídeos mais recentes da playlist
     resp = httpx.get(
         f"{YOUTUBE_API_BASE}/playlistItems",
         params={
             "part": "snippet",
             "playlistId": uploads_playlist_id,
-            "maxResults": 1,
+            "maxResults": 5,
             "key": _api_key(),
         },
         timeout=30,
     )
     resp.raise_for_status()
-    items = resp.json().get("items", [])
-    if not items:
+    playlist_items = resp.json().get("items", [])
+    if not playlist_items:
         logger.warning("Nenhum vídeo encontrado na playlist")
-        return None
+        return []
 
-    video_id = items[0]["snippet"]["resourceId"]["videoId"]
-    logger.info(f"Latest video ID: {video_id}")
+    video_ids = [i["snippet"]["resourceId"]["videoId"] for i in playlist_items]
+    candidate_urls = {f"https://www.youtube.com/watch?v={vid}" for vid in video_ids}
+    logger.info(f"Candidate video IDs: {video_ids}")
 
-    # 3. Obtém detalhes completos (descrição não é truncada em videos.list)
+    # 3. Filtra os já existentes na silver table
+    placeholders = ", ".join(f"'{url}'" for url in candidate_urls)
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT url FROM {SCHEMA}.{SILVER_TABLE} WHERE url IN ({placeholders})")
+        existing = {row[0] for row in cur.fetchall()}
+
+    new_ids = [vid for vid in video_ids if f"https://www.youtube.com/watch?v={vid}" not in existing]
+    logger.info(f"{len(new_ids)} new video(s) to ingest (skipping {len(existing)} existing)")
+    if not new_ids:
+        return []
+
+    # 4. Obtém detalhes completos dos novos vídeos
     resp = httpx.get(
         f"{YOUTUBE_API_BASE}/videos",
-        params={"part": "snippet,contentDetails", "id": video_id, "key": _api_key()},
+        params={"part": "snippet,contentDetails", "id": ",".join(new_ids), "key": _api_key()},
         timeout=30,
     )
     resp.raise_for_status()
     items = resp.json().get("items", [])
-    if not items:
-        logger.warning(f"Vídeo {video_id} não encontrado")
-        return None
 
-    item = items[0]
-    snippet = item["snippet"]
-
-    thumbnails = snippet.get("thumbnails", {})
-    thumbnail_url = (
-        thumbnails.get("maxres")
-        or thumbnails.get("high")
-        or thumbnails.get("medium")
-        or thumbnails.get("default")
-        or {}
-    ).get("url")
-
-    video = {
-        "url":           f"https://www.youtube.com/watch?v={video_id}",
-        "published_at":  datetime.fromisoformat(snippet["publishedAt"].replace("Z", "+00:00")),
-        "channel_id":    snippet["channelId"],
-        "channel_title": snippet["channelTitle"],
-        "title":         snippet["title"],
-        "description":   snippet["description"],
-        "tags":          snippet.get("tags", []),
-        "duration":      item["contentDetails"]["duration"],
-        "thumbnail_url": thumbnail_url,
-    }
-    logger.info(f"Fetched: '{video['title']}' ({video['published_at'].date()})")
-    return video
+    videos = [_parse_video(item) for item in items]
+    for v in videos:
+        logger.info(f"Fetched: '{v['title']}' ({v['published_at'].date()})")
+    return videos
 
 
 @task(name="create-youtube-video-table", persist_result=False)
@@ -194,40 +207,43 @@ def clear_landing_table(conn: Connection) -> None:
 @flow(name="noticias_flazoeiro_pipeline")
 def noticias_flazoeiro_pipeline() -> None:
     logger = get_flow_logger()
-    logger.info(f"Buscando último vídeo do canal @{CHANNEL_HANDLE}")
-
-    video = fetch_latest_video()
-    if not video:
-        logger.warning("Nenhum vídeo obtido — abortando.")
-        return
-
-    table = pa.table(
-        {
-            "url":           [video["url"]],
-            "published_at":  [video["published_at"]],
-            "channel_id":    [video["channel_id"]],
-            "channel_title": [video["channel_title"]],
-            "title":         [video["title"]],
-            "description":   [video["description"]],
-            "tags":          [video["tags"]],
-            "duration":      [video["duration"]],
-            "thumbnail_url": [video["thumbnail_url"]],
-        },
-        schema=pa.schema([
-            ("url",           pa.string()),
-            ("published_at",  pa.timestamp("s", tz="UTC")),
-            ("channel_id",    pa.string()),
-            ("channel_title", pa.string()),
-            ("title",         pa.string()),
-            ("description",   pa.string()),
-            ("tags",          pa.list_(pa.string())),
-            ("duration",      pa.string()),
-            ("thumbnail_url", pa.string()),
-        ]),
-    )
+    logger.info(f"Buscando últimos vídeos do canal @{CHANNEL_HANDLE}")
 
     with DbManager.from_env() as conn:
         create_youtube_video_table(conn)
+        videos = fetch_latest_videos(conn)
+
+    if not videos:
+        logger.info("Nenhum vídeo novo — abortando.")
+        return
+
+    schema = pa.schema([
+        ("url",           pa.string()),
+        ("published_at",  pa.timestamp("s", tz="UTC")),
+        ("channel_id",    pa.string()),
+        ("channel_title", pa.string()),
+        ("title",         pa.string()),
+        ("description",   pa.string()),
+        ("tags",          pa.list_(pa.string())),
+        ("duration",      pa.string()),
+        ("thumbnail_url", pa.string()),
+    ])
+    table = pa.table(
+        {
+            "url":           [v["url"] for v in videos],
+            "published_at":  [v["published_at"] for v in videos],
+            "channel_id":    [v["channel_id"] for v in videos],
+            "channel_title": [v["channel_title"] for v in videos],
+            "title":         [v["title"] for v in videos],
+            "description":   [v["description"] for v in videos],
+            "tags":          [v["tags"] for v in videos],
+            "duration":      [v["duration"] for v in videos],
+            "thumbnail_url": [v["thumbnail_url"] for v in videos],
+        },
+        schema=schema,
+    )
+
+    with DbManager.from_env() as conn:
         ingest_youtube_video(table, conn)
         upsert_youtube_video(conn)
         clear_landing_table(conn)
