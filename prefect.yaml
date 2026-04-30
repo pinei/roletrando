@@ -99,8 +99,8 @@ deployments:
     work_pool:
       name: my-pool
 
-  - name: oilprice-spot-prod
-    entrypoint: flows/oilprice_spot.py:oilprice_spot_pipeline
+  - name: oilprice-widget-prod
+    entrypoint: flows/oilprice_widget.py:oilprice_widget_pipeline
     schedules:
       - cron: "*/15 * * * *"
     work_pool:
