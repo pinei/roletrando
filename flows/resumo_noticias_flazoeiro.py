@@ -7,14 +7,16 @@ $ prefect deploy /app/flows/resumo_noticias_flazoeiro.py:resumo_noticias_flazoei
   --cron "0 */4 * * *"
 '''
 
+import hashlib
 import os
-import time
 import logging
 
-import google.generativeai as genai
-import httpx
+from google import genai
+from google.genai import types
+
 import pyarrow as pa
 from prefect import flow, task, get_run_logger
+from prefect.events import emit_event
 
 from flows.lib.db import DbManager, Connection
 
@@ -80,14 +82,48 @@ def fetch_pending_videos(conn: Connection) -> list[dict]:
     return records
 
 
-def _generate_summary(title: str, description: str) -> str:
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview",
-        system_instruction=SYSTEM_INSTRUCTION,
+def _get_video_info(url: str) -> str:
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    contents = [
+        types.Content(
+            role="user",
+            parts=[
+                types.Part(file_data=types.FileData(file_uri=url,mime_type="video/*",)),
+                types.Part.from_text(text="Obter informações sobre esse vídeo do Youtube."),
+            ],
+        ),
+    ]
+    config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(thinking_level="HIGH"),
     )
-    prompt = f"Processe o texto de entrada abaixo e gere o resumo:\n\n-- TEXTO DE ENTRADA --\n{title}\n{description}"
-    response = model.generate_content(prompt)
+    chunks = []
+    for chunk in client.models.generate_content_stream(
+        model="gemini-3-flash-preview",
+        contents=contents,
+        config=config,
+    ):
+        if text := chunk.text:
+            chunks.append(text)
+    return "".join(chunks)
+
+
+def _generate_summary(url: str, title: str, description: str) -> str:
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    prompt = f'''
+        Processe o texto de entrada abaixo e gere o resumo.
+
+        -- TEXTO DE ENTRADA --
+        {title}
+
+        {description}
+        '''
+    response = client.models.generate_content(
+        model="gemini-3-flash-preview",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION,
+        ),
+    )
     return response.text
 
 
@@ -97,9 +133,12 @@ def summarize_videos(pending: list[dict]) -> list[tuple]:
     results = []
     for video in pending:
         try:
-            summary = _generate_summary(video["title"], video["description"])
+            video_info = _get_video_info(video["url"])
+            logger.info(f"Obtained video info for {video['url']}\n{video_info}")
+
+            summary = _generate_summary(video["url"], video["title"], video_info)
             results.append((video["url"], summary))
-            logger.info(f"Summarized: {video['url']}")
+            logger.info(f"Summarized: {video['url']}\n{summary}")
         except Exception as e:
             logger.error(f"Failed to summarize {video['url']}: {e}")
             raise
@@ -132,26 +171,6 @@ def upsert_resumo(conn: Connection) -> None:
         """)
         logger.info(f"Upserted {cur.rowcount} row(s) into `{SILVER_TABLE}`")
 
-
-@task(name="post-resumo-matrix")
-def post_summaries_to_matrix(summaries: list[tuple]) -> None:
-    logger = get_flow_logger()
-    homeserver = os.environ["LARANJEIRA_MATRIX_HOMESERVER"]
-    room_id = os.environ["LARANJEIRA_MATRIX_ROOM_ID"]
-    token = os.environ["LARANJEIRA_MATRIX_TOKEN"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    for url, summary in summaries:
-        body = f"{summary}\n\n{url}"
-        txn_id = f"resumo_{int(time.time() * 1000)}"
-        response = httpx.put(
-            f"{homeserver}/_matrix/client/v3/rooms/{room_id}/send/m.room.message/{txn_id}",
-            headers=headers,
-            json={"msgtype": "m.text", "body": body},
-            timeout=30,
-        )
-        response.raise_for_status()
-        logger.info(f"Posted summary for {url} to Matrix room")
 
 
 @task(name="clear-resumo-flazoeiro-landing", persist_result=False)
@@ -192,7 +211,12 @@ def resumo_noticias_flazoeiro_pipeline() -> None:
         upsert_resumo(conn)
         clear_landing_table(conn)
 
-    post_summaries_to_matrix(summaries)
+    for url, _ in summaries:
+        emit_event(
+            event="resumo_noticias_flazoeiro.summary.created",
+            resource={"prefect.resource.id": f"flow.resumo_noticias_flazoeiro_pipeline"},
+            payload={"url": url},
+        )
 
 
 if __name__ == "__main__":
