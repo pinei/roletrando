@@ -105,3 +105,17 @@ deployments:
       - cron: "0 */3 * * *"
     work_pool:
       name: my-pool
+
+  - name: noticia-flazoeiro-matrix-prod
+    entrypoint: flows/noticia_flazoeiro_matrix.py:noticia_flazoeiro_matrix_pipeline
+    work_pool:
+      name: my-pool
+    triggers:
+      - type: event
+        enabled: true
+        match:
+          prefect.resource.id: "flow.resumo_noticias_flazoeiro_pipeline"
+        expect:
+          - resumo_noticias_flazoeiro.summary.created
+        parameters:
+          url: "{{ event.payload.url }}"
