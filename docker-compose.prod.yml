@@ -1,21 +1,8 @@
 services:
-  prefect-server:
-    image: prefecthq/prefect:3.6.28.dev4-python3.11
+  prefect:
+    build: .
     environment:
-      PREFECT_SERVER_API_HOST: 0.0.0.0
-    entrypoint: [ "prefect", "server", "start" ]
-    ports:
-      - "4200:4200"
-    volumes:
-      - prefect-data:/root/.prefect
-    restart: unless-stopped
-
-  prefect-worker:
-    build:
-      dockerfile: Dockerfile.worker
-    command: prefect worker start -p my-pool -t process
-    environment:
-      - PREFECT_API_URL=http://prefect-server:4200/api
+      - PREFECT_API_URL=http://localhost:4200/api
       - GIZMOSQL_URL=${GIZMOSQL_URL}
       - GIZMOSQL_USERNAME=${GIZMOSQL_USERNAME}
       - GIZMOSQL_PASSWORD=${GIZMOSQL_PASSWORD}
@@ -30,15 +17,15 @@ services:
       - LARANJEIRA_MATRIX_TOKEN=${LARANJEIRA_MATRIX_TOKEN}
       - LARANJEIRA_MATRIX_HOMESERVER=${LARANJEIRA_MATRIX_HOMESERVER}
       - LARANJEIRA_MATRIX_ROOM_ID=${LARANJEIRA_MATRIX_ROOM_ID}
-
+    ports:
+      - "4200:4200"
     volumes:
-      - ./flows:/app/flows  # acesso aos flows
-      - ./secrets:/app/secrets # secrets
-      - ./prefect.yaml:/app/prefect.yaml:rw  # config do worker
-
-    depends_on:
-      - prefect-server
+      - ./data:/root/.prefect
+      - pgdata-prefect:/var/lib/postgresql/data
+      - ./flows:/app/flows
+      - ./secrets:/app/secrets
+      - ./prefect.yaml:/app/prefect.yaml:rw
     restart: unless-stopped
 
 volumes:
-  prefect-data:
+  pgdata-prefect:
