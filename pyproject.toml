@@ -15,6 +15,8 @@ dependencies = [
     "gspread",
     "pandas",
     "google-generativeai",
+    "google",
+    "google.genai"
 ]
 
 [project.optional-dependencies]
